@@ -228,7 +228,7 @@ void add_copy_command(reshade::api::effect_runtime* runtime, reshade::api::comma
 			dst.handle = uint64_t(sharedTexture);
 
 			if (sharedTextureMutex != NULL)
-				sharedTextureMutex->AcquireSync(0, INFINITE);
+				sharedTextureMutex->AcquireSync(0, 50);
 
 			runtime->get_command_queue()->get_immediate_command_list()->copy_resource(src, dst);
 			runtime->get_command_queue()->flush_immediate_command_list();
