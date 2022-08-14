@@ -13,13 +13,10 @@ extern "C" __declspec(dllexport) const char* DESCRIPTION = "Export 3D back buffe
 
 
 static IDXGIKeyedMutex* sharedTextureMutex;
-static void* toShareTexture;
 static void* sharedTexture;
 
 void share_d3d11_texture(ID3D11Texture2D* texture, ID3D11Device* device)
 {
-	toShareTexture = texture;
-
 	D3D11_TEXTURE2D_DESC texDesc;
 	texture->GetDesc(&texDesc);
 	texDesc.BindFlags |= D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -105,8 +102,6 @@ void share_d3d11_texture(ID3D11Texture2D* texture, ID3D11Device* device)
 
 void share_d3d12_texture(ID3D12Resource* texture, ID3D12Device* device)
 {
-	toShareTexture = texture;
-
 	D3D12_RESOURCE_DESC texDesc = texture->GetDesc();
 	texDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 	
@@ -178,9 +173,7 @@ void share_d3d12_texture(ID3D12Resource* texture, ID3D12Device* device)
 	sharedTexture = stereoSharedBuffer;
 }
 
-void export_effects(reshade::api::effect_runtime* runtime)
-{
-	reshade::log_message(3, "Searching vr buffer...");
+reshade::api::effect_texture_variable get_vr_texture(reshade::api::effect_runtime* runtime) {
 	auto vrTexture = runtime->find_texture_variable("3DToElse.fx", "V__texTOT");
 	if (vrTexture == NULL) {
 		vrTexture = runtime->find_texture_variable("SuperDepth3D_VR+.fx", "V__DoubleTex");
@@ -188,14 +181,29 @@ void export_effects(reshade::api::effect_runtime* runtime)
 	if (vrTexture == NULL) {
 		vrTexture = runtime->find_texture_variable("SuperDepth3D_VR+.fx", "V__SuperDepth3DVR__DoubleTex");
 	}
+	return vrTexture;
+}
+
+reshade::api::resource get_texture_resource(reshade::api::effect_runtime* runtime, reshade::api::effect_texture_variable texture) {
+	reshade::api::resource_view vr_view;
+	reshade::api::resource_view srgb_vr_view;
+	runtime->get_texture_binding(texture, &vr_view, &srgb_vr_view);
+	if (vr_view.handle != NULL || srgb_vr_view.handle != NULL) {
+		return runtime->get_device()->get_resource_from_view(srgb_vr_view.handle != NULL ? srgb_vr_view : vr_view);
+	}
+	return reshade::api::resource{0};
+}
+
+void export_effects(reshade::api::effect_runtime* runtime)
+{
+	reshade::log_message(3, "Searching vr buffer...");
+	auto vrTexture = get_vr_texture(runtime);
 	if (vrTexture != NULL)
 	{
 		reshade::log_message(3, "Found VR Buffer, sharing...");
-		reshade::api::resource_view vr_view;
-		reshade::api::resource_view srgb_vr_view;
-		runtime->get_texture_binding(vrTexture, &vr_view, &srgb_vr_view);
-		if (vr_view.handle != NULL || srgb_vr_view.handle != NULL) {
-			reshade::api::resource texture = runtime->get_device()->get_resource_from_view(srgb_vr_view.handle != NULL ? srgb_vr_view : vr_view);
+		reshade::api::resource texture = get_texture_resource(runtime, vrTexture);
+		
+		if (texture.handle != NULL) {
 			switch (runtime->get_device()->get_api())
 			{
 			case reshade::api::device_api::d3d11:
@@ -211,20 +219,23 @@ void export_effects(reshade::api::effect_runtime* runtime)
 
 void add_copy_command(reshade::api::effect_runtime* runtime, reshade::api::command_list * cmd_list, reshade::api::resource_view rtv, reshade::api::resource_view rtv_srgb)
 {
-	if (toShareTexture != NULL && sharedTexture != NULL) {
-		reshade::api::resource src;
-		reshade::api::resource dst;
-		src.handle = uint64_t(toShareTexture);
-		dst.handle = uint64_t(sharedTexture);
+	auto vrTexture = get_vr_texture(runtime);
+	if (vrTexture != NULL)
+	{
+		reshade::api::resource src = get_texture_resource(runtime, vrTexture);
+		if (src.handle != NULL && sharedTexture != NULL) {
+			reshade::api::resource dst;
+			dst.handle = uint64_t(sharedTexture);
 
-		if(sharedTextureMutex != NULL)
-			sharedTextureMutex->AcquireSync(0, INFINITE);
+			if (sharedTextureMutex != NULL)
+				sharedTextureMutex->AcquireSync(0, INFINITE);
 
-		runtime->get_command_queue()->get_immediate_command_list()->copy_resource(src, dst);
-		runtime->get_command_queue()->flush_immediate_command_list();
+			runtime->get_command_queue()->get_immediate_command_list()->copy_resource(src, dst);
+			runtime->get_command_queue()->flush_immediate_command_list();
 
-		if(sharedTextureMutex != NULL)
-			sharedTextureMutex->ReleaseSync(0);
+			if (sharedTextureMutex != NULL)
+				sharedTextureMutex->ReleaseSync(0);
+		}
 	}
 }
 
