@@ -185,6 +185,9 @@ void export_effects(reshade::api::effect_runtime* runtime)
 	if (vrTexture == NULL) {
 		vrTexture = runtime->find_texture_variable("SuperDepth3D_VR+.fx", "V__DoubleTex");
 	}
+	if (vrTexture == NULL) {
+		vrTexture = runtime->find_texture_variable("SuperDepth3D_VR+.fx", "V__SuperDepth3DVR__DoubleTex");
+	}
 	if (vrTexture != NULL)
 	{
 		reshade::log_message(3, "Found VR Buffer, sharing...");
