@@ -23,6 +23,11 @@ void share_d3d11_texture(ID3D11Texture2D* texture, ID3D11Device* device)
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
 
+	if (sharedTextureMutex != NULL) {
+		sharedTextureMutex->Release();
+		sharedTextureMutex = NULL;
+	}
+
 	if (sharedTexture != NULL) {
 		((ID3D11Texture2D*)sharedTexture)->Release();
 		sharedTexture = NULL;
@@ -106,6 +111,11 @@ void share_d3d12_texture(ID3D12Resource* texture, ID3D12Device* device)
 	texDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 	
 	D3D12_HEAP_PROPERTIES texHeapProperties = D3D12_HEAP_PROPERTIES{ D3D12_HEAP_TYPE_DEFAULT };
+
+	if (sharedTextureMutex != NULL) {
+		sharedTextureMutex->Release();
+		sharedTextureMutex = NULL;
+	}
 
 	if (sharedTexture != NULL) {
 		((ID3D12Resource*)sharedTexture)->Release();
